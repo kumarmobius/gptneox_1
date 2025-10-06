@@ -22,12 +22,12 @@ implementation:
       - -c
       - |
         import subprocess, sys, os, json, argparse, importlib.util, textwrap
-        # Install packages
+        # Install runtime deps (quiet)
         subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--no-cache-dir", "torch", "tokenizers"], check=True)
         import torch
         from tokenizers import Tokenizer
 
-        # === model source string (will be dedented before writing) ===
+        # === embedded model source (written to model_py at runtime) ===
         MODEL_PY = '''
         import math
         import torch
@@ -177,26 +177,26 @@ implementation:
                     else:
                         f.write(str(value))
             except Exception as e:
-                print(f"[ERROR] Failed to write to {path}: {e}")
+                print("[ERROR] Failed to write to {}: {}".format(path, e))
                 sys.exit(1)
 
         def main():
             ap = argparse.ArgumentParser()
-            ap.add_argument("--tokenizer-json", required=True)
-            ap.add_argument("--num-layers", type=int, required=True)
-            ap.add_argument("--model-weights", required=True)
-            ap.add_argument("--model-config", required=True)
-            ap.add_argument("--model-py", required=True)
+            ap.add_argument("--tokenizer_json", required=True)
+            ap.add_argument("--num_layers", type=int, required=True)
+            ap.add_argument("--model_weights", required=True)
+            ap.add_argument("--model_config", required=True)
+            ap.add_argument("--model_py", required=True)
             args = ap.parse_args()
 
             # validate tokenizer path
             if not os.path.exists(args.tokenizer_json):
-                print(f"[ERROR] Tokenizer file not found: {args.tokenizer_json}")
+                print("[ERROR] Tokenizer file not found: " + args.tokenizer_json)
                 sys.exit(1)
 
             tok = Tokenizer.from_file(args.tokenizer_json)
             vocab_size = tok.get_vocab_size()
-            print(f"[INFO] Loaded tokenizer with vocab_size={vocab_size}")
+            print("[INFO] Loaded tokenizer with vocab_size=" + str(vocab_size))
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
             model_dtype = torch.float16 if device == "cuda" else torch.float32
@@ -218,14 +218,14 @@ implementation:
             os.makedirs(os.path.dirname(args.model_config) or ".", exist_ok=True)
             with open(args.model_config, "w", encoding="utf-8") as f:
                 json.dump(cfg_to_save, f, indent=2)
-            print(f"[INFO] Model config saved to {args.model_config}")
+            print("[INFO] Model config saved to " + args.model_config)
 
             # Write model source file (dedented to avoid indentation artifacts)
             model_py_text = textwrap.dedent(MODEL_PY.lstrip('\n'))
             os.makedirs(os.path.dirname(args.model_py) or ".", exist_ok=True)
             with open(args.model_py, "w", encoding="utf-8") as f:
                 f.write(model_py_text)
-            print(f"[INFO] Model source saved to {args.model_py}")
+            print("[INFO] Model source saved to " + args.model_py)
 
             # Dynamically import and instantiate to save weights
             spec = importlib.util.spec_from_file_location("tinygpt_neox_model", args.model_py)
@@ -239,21 +239,21 @@ implementation:
 
             os.makedirs(os.path.dirname(args.model_weights) or ".", exist_ok=True)
             torch.save(model.state_dict(), args.model_weights)
-            print(f"[INFO] Weights saved to {args.model_weights}")
+            print("[INFO] Weights saved to " + args.model_weights)
 
             n_params = sum(p.numel() for p in model.parameters())
-            print(f"[INFO] TinyGPTNeoX init complete: layers={CONFIG['num_layers']} params={n_params} device={device}")
+            print("[INFO] TinyGPTNeoX init complete: layers=" + str(CONFIG['num_layers']) + " params=" + str(n_params) + " device=" + str(device))
 
         if __name__ == "__main__":
             main()
     args:
-      - --tokenizer-json
+      - --tokenizer_json
       - {inputPath: tokenizer_json}
-      - --num-layers
+      - --num_layers
       - {inputValue: num_layers}
-      - --model-weights
+      - --model_weights
       - {outputPath: model_weights}
-      - --model-config
+      - --model_config
       - {outputPath: model_config}
-      - --model-py
+      - --model_py
       - {outputPath: model_py}
