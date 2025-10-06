@@ -2,13 +2,13 @@ name: Build TinyGPTNeoX Model
 description: Builds an untrained TinyGPTNeoX model from tokenizer vocab and hyperparams.
 
 inputs:
-  - {name: tokenizer_json, type: Model}
+  - {name: tokenizer_json, type: String}
   - {name: num_layers, type: Integer, default: '4'}
 
 outputs:
-  - {name: model_weights, type: Model}
-  - {name: model_config, type: Data}
-  - {name: model_py, type: Data}
+  - {name: model_weights, type: String}
+  - {name: model_config, type: String}
+  - {name: model_py, type: String}
 
 implementation:
   container:
@@ -24,14 +24,12 @@ implementation:
       - -u
       - -c
       - |
-
-        import subprocess, sys, os, json, argparse
+        import subprocess, sys, os, json, argparse, importlib.util
         subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--no-cache-dir", "torch", "tokenizers"], check=True)
         import torch
+        from tokenizers import Tokenizer
 
-        # === model source string (saved to model_py) ===
-        MODEL_PY = r"""
-        import math
+        MODEL_PY = r"""import math
         import torch
         import torch.nn as nn
         import torch.nn.functional as F
@@ -192,7 +190,6 @@ implementation:
             args = ap.parse_args()
 
             try:
-                # load vocab size from tokenizer file
                 if not os.path.exists(args.tokenizer_json):
                     print(f"[ERROR] Tokenizer file not found: {args.tokenizer_json}")
                     sys.exit(1)
@@ -216,11 +213,9 @@ implementation:
                     "dtype": "float16" if model_dtype == torch.float16 else "float32",
                 }
 
-                # write config and model source to output artifact paths
                 write_output(args.model_config, CONFIG)
                 write_output(args.model_py, MODEL_PY)
 
-                # dynamically import the saved model source file and instantiate the model
                 spec = importlib.util.spec_from_file_location("tinygpt_neox_model", args.model_py)
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
@@ -230,7 +225,6 @@ implementation:
                     model.half()
                 model.to(device).eval()
 
-                # ensure output dir exists for model weights then save state_dict
                 os.makedirs(os.path.dirname(args.model_weights) or ".", exist_ok=True)
                 torch.save(model.state_dict(), args.model_weights)
 
