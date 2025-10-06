@@ -29,7 +29,8 @@ implementation:
         import torch
         from tokenizers import Tokenizer
 
-        MODEL_PY = r"""import math
+        MODEL_PY = r"""
+        import math
         import torch
         import torch.nn as nn
         import torch.nn.functional as F
